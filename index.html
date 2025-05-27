@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- 
+Created by 
+
+- Diederik de Zee (@ddezee) / https://cloudnative.engineer
+- Luqueratief (@luqueratief)
+-->
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wordgen.shop: Random English Word Generator</title>
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Montserrat:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --light-bg: linear-gradient(135deg, #f0f4ff, #d9e4ff);
+      --light-text: #333;
+      --light-card: #fff;
+
+      --dark-bg: linear-gradient(135deg, #2c2c2c, #1a1a1a);
+      --dark-text: #eee;
+      --dark-card: #333;
+
+      --primary: #4a90e2;
+      --primary-hover: #357ab8;
+    }
+    body {
+      font-family: 'Montserrat', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      background: var(--light-bg);
+      color: var(--light-text);
+      transition: background 0.3s, color 0.3s;
+    }
+    body.dark {
+      background: var(--dark-bg);
+      color: var(--dark-text);
+    }
+    #word {
+      font-family: 'Playfair Display', serif;
+      font-size: 4rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      text-transform: capitalize;
+      letter-spacing: 2px;
+      cursor: pointer;
+    }
+    small {
+      color: #bbb !important;
+      display: block;
+      margin-top: 0.5rem;
+      font-size: 1rem;
+      font-style: italic;
+      text-align: center;
+    }
+    #notice {
+      color: #888;
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+    }
+    #definition {
+      color: #888;
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+    }
+    .controls {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+      background: var(--light-card);
+      padding: 1.5rem;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+    body.dark .controls {
+      background: var(--dark-card);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    .controls > * {
+      width: 100%;
+    }
+    #regenerate {
+      padding: 0.75rem 1.5rem;
+      background-color: var(--primary);
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    #regenerate:hover {
+      background-color: var(--primary-hover);
+    }
+    .interval-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    input[type=range] {
+      flex: 1;
+    }
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 50px;
+      height: 26px;
+    }
+    .switch input { display: none; }
+    .slider-switch {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      transition: 0.4s;
+      border-radius: 26px;
+    }
+    .slider-switch:before {
+      position: absolute;
+      content: "";
+      height: 22px;
+      width: 22px;
+      left: 2px;
+      bottom: 2px;
+      background-color: white;
+      transition: 0.4s;
+      border-radius: 50%;
+    }
+    input:checked + .slider-switch {
+      background-color: var(--primary);
+    }
+    input:checked + .slider-switch:before {
+      transform: translateX(24px);
+    }
+    label.switch-label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+    a,a:link {
+      color: #bbb!important;
+    }
+    small {
+      font-size: 76%;
+    }
+  </style>
+</head>
+<body>
+  <div id="word">Loading...</div>
+  <small id="definition"></small>
+  <small id="notice">Click the word to fetch the definition</small>
+  <div class="controls">
+    <button id="regenerate">Regenerate Word</button>
+    <div class="interval-group">
+      <label for="intervalSlider">Automatically generate every <span id="intervalValue">30</span>s</label>
+    </div>
+    <input type="range" id="intervalSlider" min="1" max="120" value="30">
+    <label class="switch-label">
+      <span>Dark Mode</span>
+      <label class="switch">
+        <input type="checkbox" id="themeToggle">
+        <span class="slider-switch"></span>
+      </label>
+    </label>
+   <small>Created by <a href="https://cloudnative.engineer">@ddezee</a> & <a href="https://x.com/luqueratief">@Luqueratief</a></small>
+
+  </div>
+
+  <script>
+    let words = [];
+    let intervalId;
+    let intervalSeconds = 30;
+
+    // Fetch dictionary
+    async function loadDictionary() {
+      try {
+        const res = await fetch('dictionary.txt');
+        const text = await res.text();
+        words = text.split(/\r?\n/).filter(Boolean);
+        displayRandomWord();
+        startInterval();
+      } catch (err) {
+        document.getElementById('word').textContent = 'Failed to load dictionary.';
+        console.error(err);
+      }
+    }
+
+    // Display random word & clear definition
+    function displayRandomWord() {
+      if (!words.length) return;
+      const idx = Math.floor(Math.random() * words.length);
+      const w = words[idx];
+      document.getElementById('word').textContent = w;
+      document.getElementById('definition').textContent = '';
+      document.getElementById('notice').style.display = 'block';
+    }
+
+    // Start interval
+    function startInterval() {
+      clearInterval(intervalId);
+      intervalId = setInterval(displayRandomWord, intervalSeconds * 1000);
+    }
+
+    // Fetch definition
+    async function fetchDefinition(word) {
+      const defEl = document.getElementById('definition');
+      const noticeEl = document.getElementById('notice');
+      noticeEl.style.display = 'none';
+      defEl.textContent = 'Loading definition...';
+      try {
+        const resp = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`);
+        const data = await resp.json();
+        if (data[0] && data[0].meanings[0]) {
+          const meaning = data[0].meanings[0];
+          const def = meaning.definitions[0].definition;
+          defEl.textContent = def;
+        } else {
+          defEl.textContent = 'No definition found.';
+        }
+      } catch (e) {
+        defEl.textContent = 'Error fetching definition.';
+      }
+    }
+
+    // Initialize theme
+    function initTheme() {
+      const toggle = document.getElementById('themeToggle');
+      const saved = localStorage.getItem('theme');
+      const dark = saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      document.body.classList.toggle('dark', dark);
+      toggle.checked = dark;
+      toggle.addEventListener('change', () => {
+        const isDark = toggle.checked;
+        document.body.classList.toggle('dark', isDark);
+        localStorage.setItem('theme', isDark ? 'dark' : 'light');
+      });
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const slider = document.getElementById('intervalSlider');
+      const valueDisplay = document.getElementById('intervalValue');
+      const regenBtn = document.getElementById('regenerate');
+      const wordEl = document.getElementById('word');
+
+      slider.addEventListener('input', e => {
+        intervalSeconds = parseInt(e.target.value, 10);
+        valueDisplay.textContent = intervalSeconds;
+        startInterval();
+      });
+
+      regenBtn.addEventListener('click', displayRandomWord);
+      wordEl.addEventListener('click', () => fetchDefinition(wordEl.textContent.trim()));
+
+      initTheme();
+      loadDictionary();
+    });
+  </script>
+
+</body>
+</html>
